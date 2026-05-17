@@ -39,15 +39,11 @@ ORACLE_DSN: str = os.getenv("ORACLE_DSN", "localhost:1521/XEPDB1")
 ORACLE_USER: str = os.getenv("ORACLE_USER", "")
 ORACLE_PASSWORD: str = os.getenv("ORACLE_PASSWORD", "")
 
-# ── Google Gemini (Free Tier) ─────────────────────────────────────────────────
+# ── GROQ (Free Tier) ─────────────────────────────────────────────────
 
-GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
-
-#: Modelo obrigatório conforme restrição de custo do projeto acadêmico.
-GEMINI_MODEL: str = "gemini-2.0-flash"
-
-#: Temperatura baixa para maximizar determinismo em raciocínio clínico.
-GEMINI_TEMPERATURE: float = 0.10
+GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL: str = "llama-3.3-70b-versatile"
+GROQ_TEMPERATURE: float = 0.10
 
 # ── Limiar de Ambiguidade ─────────────────────────────────────────────────────
 
@@ -56,31 +52,20 @@ AMBIGUITY_THRESHOLD: int = int(os.getenv("AMBIGUITY_THRESHOLD", "60"))
 
 # ── Validação Fail-Fast ───────────────────────────────────────────────────────
 
-
 def validate_config() -> None:
-    """
-    Verifica que todas as credenciais críticas estão presentes.
-    Lança RuntimeError com mensagem clara se alguma estiver ausente.
-    Deve ser chamada no startup da aplicação.
-    """
     missing: list[str] = []
-
     if not ORACLE_USER:
         missing.append("ORACLE_USER")
     if not ORACLE_PASSWORD:
         missing.append("ORACLE_PASSWORD")
-    if not GOOGLE_API_KEY:
-        missing.append("GOOGLE_API_KEY")
-
+    if not GROQ_API_KEY:
+        missing.append("GROQ_API_KEY")
     if missing:
         raise RuntimeError(
-            "Configuração incompleta. Defina as seguintes variáveis de ambiente "
-            f"no arquivo .env: {', '.join(missing)}"
+            f"Defina as variáveis no .env: {', '.join(missing)}"
         )
-
     logger.info(
-        "Configuração validada | Oracle DSN: %s | Modelo: %s | Limiar ambiguidade: %d%%",
+        "Configuração validada | Oracle DSN: %s | Modelo: %s",
         ORACLE_DSN,
-        GEMINI_MODEL,
-        AMBIGUITY_THRESHOLD,
+        GROQ_MODEL,
     )

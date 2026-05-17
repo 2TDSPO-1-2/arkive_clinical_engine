@@ -9,8 +9,8 @@ oracledb>=2.3.0,<3.0.0
 # LangChain core
 langchain>=0.3.0,<0.4.0
 
-# Google Gemini via LangChain (gemini-1.5-flash, free tier)
-langchain-google-genai>=2.0.0,<3.0.0
+# Groq via LangChain (llama-3.3-70b-versatile, free tier)
+langchain-groq>=0.2.0,<1.0.0
 
 # LangChain community tools (DuckDuckGo search fallback)
 langchain-community>=0.3.0,<0.4.0
