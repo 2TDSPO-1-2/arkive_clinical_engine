@@ -1,0 +1,86 @@
+"""
+config.py
+=========
+Centraliza o carregamento e a validação de todas as configurações do
+Motor de Inteligência Clínica Veterinária ArkIve.
+
+Lê variáveis do arquivo .env via python-dotenv; falha rapidamente
+(fail-fast) se credenciais críticas estiverem ausentes.
+"""
+
+import logging
+import os
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Carrega o .env a partir do diretório do projeto (sobe um nível se necessário)
+_env_path = Path(__file__).parent / ".env"
+load_dotenv(dotenv_path=_env_path, override=False)
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+
+_LOG_LEVEL_STR: str = os.getenv("LOG_LEVEL", "INFO").upper()
+_LOG_LEVEL: int = getattr(logging, _LOG_LEVEL_STR, logging.INFO)
+
+logging.basicConfig(
+    level=_LOG_LEVEL,
+    format="%(asctime)s [%(levelname)-8s] %(name)s — %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    stream=sys.stdout,
+)
+
+logger = logging.getLogger(__name__)
+
+# ── Oracle Database ───────────────────────────────────────────────────────────
+
+ORACLE_DSN: str = os.getenv("ORACLE_DSN", "localhost:1521/XEPDB1")
+ORACLE_USER: str = os.getenv("ORACLE_USER", "")
+ORACLE_PASSWORD: str = os.getenv("ORACLE_PASSWORD", "")
+
+# ── Google Gemini (Free Tier) ─────────────────────────────────────────────────
+
+GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
+
+#: Modelo obrigatório conforme restrição de custo do projeto acadêmico.
+GEMINI_MODEL: str = "gemini-1.5-flash"
+
+#: Temperatura baixa para maximizar determinismo em raciocínio clínico.
+GEMINI_TEMPERATURE: float = 0.10
+
+# ── Limiar de Ambiguidade ─────────────────────────────────────────────────────
+
+#: Se a IA avaliar confiança local < este valor, a busca web é acionada.
+AMBIGUITY_THRESHOLD: int = int(os.getenv("AMBIGUITY_THRESHOLD", "60"))
+
+# ── Validação Fail-Fast ───────────────────────────────────────────────────────
+
+
+def validate_config() -> None:
+    """
+    Verifica que todas as credenciais críticas estão presentes.
+    Lança RuntimeError com mensagem clara se alguma estiver ausente.
+    Deve ser chamada no startup da aplicação.
+    """
+    missing: list[str] = []
+
+    if not ORACLE_USER:
+        missing.append("ORACLE_USER")
+    if not ORACLE_PASSWORD:
+        missing.append("ORACLE_PASSWORD")
+    if not GOOGLE_API_KEY:
+        missing.append("GOOGLE_API_KEY")
+
+    if missing:
+        raise RuntimeError(
+            "Configuração incompleta. Defina as seguintes variáveis de ambiente "
+            f"no arquivo .env: {', '.join(missing)}"
+        )
+
+    logger.info(
+        "Configuração validada | Oracle DSN: %s | Modelo: %s | Limiar ambiguidade: %d%%",
+        ORACLE_DSN,
+        GEMINI_MODEL,
+        AMBIGUITY_THRESHOLD,
+    )

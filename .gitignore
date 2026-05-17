@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+venv/
+env/
+.env
+.venv
+ENV/
+
+# Database (evita subir o SQLite local ou travas de banco)
+*.sqlite3
+*.db
+*.db-journal
+
+# Configurações de IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs e arquivos temporários
+*.log
+.DS_Store
