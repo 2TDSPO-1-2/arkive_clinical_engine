@@ -52,8 +52,14 @@ INSTRUÇÕES CRÍTICAS ANTI-ALUCINAÇÃO:
 1. Baseie-se EXCLUSIVAMENTE nos dados clínicos fornecidos e em evidências \
    médico-veterinárias estabelecidas (ou nas fontes web incluídas no contexto).
 2. NUNCA invente sintomas, resultados laboratoriais ou informações ausentes.
-3. Quando dados forem insuficientes, declare explicitamente a limitação e \
-   reduza o pc_confianca de forma conservadora (abaixo de 50).
+3. Calibre o pc_confianca pela seguinte escala obrigatória:
+   - 80-100: sintomas específicos + predisposição genética confirmada + \
+     todos os dados de bem-estar presentes e coerentes.
+   - 60-79:  sintomas moderadamente específicos + pelo menos um fator \
+     corroborante (predisposição ou bem-estar alterado).
+   - 40-59:  sintomas inespecíficos ou dados parcialmente ausentes.
+   - 0-39:   dados insuficientes para qualquer hipótese confiável. \
+     Neste caso reduza a severidade para LEVE salvo evidência contrária.
 4. Predisposições genéticas são FATORES DE RISCO, não diagnósticos definitivos.
 5. Se fontes web foram consultadas, integre as evidências de forma crítica \
    e mencione-as no ds_insight_ia.
