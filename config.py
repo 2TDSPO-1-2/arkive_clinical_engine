@@ -44,7 +44,7 @@ ORACLE_PASSWORD: str = os.getenv("ORACLE_PASSWORD", "")
 GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
 
 #: Modelo obrigatório conforme restrição de custo do projeto acadêmico.
-GEMINI_MODEL: str = "gemini-1.5-flash"
+GEMINI_MODEL: str = "gemini-2.0-flash"
 
 #: Temperatura baixa para maximizar determinismo em raciocínio clínico.
 GEMINI_TEMPERATURE: float = 0.10
