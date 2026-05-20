@@ -64,46 +64,15 @@ O sistema opera em **modo estritamente read-only** no banco, nunca escrevendo ou
 ## Arquitetura do Sistema
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      main.py (entrada)                          │
-│                   python main.py <ID_CONSULTA>                  │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              ClinicalIntelligenceEngine                         │
-│                  agents/clinical_agent.py                       │
-│                                                                 │
-│  Etapa 1 ──► Oracle (READ-ONLY)                                 │
-│              Extrai: animal, espécie, raça, consulta,           │
-│              bem-estar, predisposições genéticas                │
-│                                                                 │
-│  Etapa 2 ──► Heurística local (Python puro, zero API)           │
-│              Score de qualidade dos dados clínicos              │
-│              Decide se busca web é necessária                   │
-│                                                                 │
-│  Etapa 3 ──► Cálculo determinístico (Python puro, zero API)     │
-│              pc_confianca calculado com rubrica fixa            │
-│              baseada nos dados reais do Oracle                  │
-│                                                                 │
-│  Etapa 4 ──► DuckDuckGo (condicional, zero API)                 │
-│              Busca literatura veterinária se score < threshold  │
-│              Prioriza NCBI/PubMed e Merck Veterinary Manual     │
-│                                                                 │
-│  Etapa 5 ──► Groq API (UMA única chamada)                       │
-│              LLaMA 3.3 70B gera DiagnosticoOutput               │
-│              validado pelo Pydantic v2                          │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    JSON de Saída                                 │
-│   {ds_diagnostico, tp_severidade, ds_insight_ia,               │
-│    pc_confianca, fontes_pesquisadas}                            │
-│                                                                 │
-│   → Consumido pelo serviço Java para persistir em               │
-│     TB_ARKIVE_DIAGNOSTICO                                       │
-└─────────────────────────────────────────────────────────────────┘
+Entrada: main.py ──► python main.py <ID_CONSULTA>
+Etapa 1 ──► Oracle (READ-ONLY): Extrai: animal, espécie, raça, consulta, bem-estar e predisposições genéticas.
+Etapa 2 ──► Heurística local: Score de qualidade dos dados clínicos. Decide se busca web é necessária.
+Etapa 3 ──► Cálculo determinístico: pc_confianca calculado com rubrica fixa baseada nos dados reais do Oracle.
+Etapa 4 ──► DuckDuckGo: Busca literatura veterinária se score < threshold. Prioriza NCBI/PubMed e Merck Veterinary Manual.
+Etapa 5 ──► Groq API: LLaMA 3.3 70B gera DiagnosticoOutput validado pelo Pydantic v2.
+Saída: JSON ──► {ds_diagnostico, tp_severidade, ds_insight_ia, pc_confianca, fontes_pesquisadas}
+
+A resposta é trabalhada através da API de Java para persistência dos dados em TB_ARKIVE_DIAGNOSTICO.
 ```
 
 ### Estrutura de Arquivos
