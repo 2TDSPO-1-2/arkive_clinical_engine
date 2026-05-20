@@ -1,11 +1,11 @@
-# 🐾 ArkIve — Motor de Inteligência Clínica Veterinária
+# ArkIve — Motor de Inteligência Clínica Veterinária
 
-> **FIAP Challenge 2026 — 2º Ano ADS | Turmas de Fevereiro**  
+> **FIAP Challenge 2026 — 2º Ano ADS | Turmas de Fevereiro**
 > Parceria: **Clyvo Vet** · Disciplina: *Disruptive Architectures: IoT, IoB & Generative AI*
 
 ---
 
-## 👥 Equipe
+## Equipe
 
 | Nome | RM |
 |------|----|
@@ -16,7 +16,7 @@
 
 ---
 
-## 🎯 Problema Abordado
+## Problema Abordado
 
 A jornada de saúde do pet é **fragmentada e reativa**. Responsáveis e veterinários interagem apenas em momentos pontuais — vacinas, emergências, retornos — sem continuidade inteligente entre as consultas.
 
@@ -30,11 +30,11 @@ Do ponto de vista clínico, isso significa que o veterinário frequentemente:
 
 ---
 
-## 💡 Solução Proposta
+## Solução Proposta
 
 O **Motor de Inteligência Clínica Veterinária ArkIve** é um microsserviço Python que, a partir do ID de uma consulta veterinária, extrai automaticamente os dados clínicos do banco Oracle (histórico do animal, sintomas, bem-estar, predisposições genéticas da raça), e aciona um modelo de linguagem (LLM) via API para gerar uma **hipótese diagnóstica estruturada** — pronta para ser consumida pelo serviço Java que persiste o resultado no banco.
 
-O sistema opera em **modo estritamente read-only** no banco, nunca escrevendo ou alterando dados.
+O sistema opera em **modo estritamente read-only** no banco, nunca escrevendo ou alterando dados. Atende qualquer espécie animal — doméstica, silvestre, zoológica ou de produção.
 
 ### Como a solução melhora a jornada
 
@@ -47,21 +47,21 @@ O sistema opera em **modo estritamente read-only** no banco, nunca escrevendo ou
 
 ---
 
-## 🧠 Tecnologias Utilizadas
+## Tecnologias Utilizadas
 
-| Camada | Tecnologia |
-|--------|-----------|
-| Linguagem | Python 3.11+ |
-| LLM / IA Generativa | [Groq API](https://console.groq.com) · modelo `llama-3.3-70b-versatile` (free tier) |
-| Orquestração LLM | LangChain + `with_structured_output()` |
-| Banco de Dados | Oracle (modo Thin via `oracledb`) |
-| Validação de Schema | Pydantic v2 |
-| Busca Web (fallback) | DuckDuckGo Search (`duckduckgo-search`) |
-| Variáveis de Ambiente | `python-dotenv` |
+| Camada | Tecnologia | Papel no sistema |
+|--------|-----------|-----------------|
+| Linguagem | Python 3.11+ | Orquestra todas as etapas |
+| LLM / IA Generativa | [Groq API](https://console.groq.com) · `llama-3.3-70b-versatile` | Gera o raciocínio clínico e o diagnóstico |
+| Orquestração LLM | LangChain + `with_structured_output()` | Garante saída JSON validada pelo Pydantic |
+| Banco de Dados | Oracle via `oracledb` (modo Thin) | Fonte de dados clínicos — somente leitura |
+| Validação de Schema | Pydantic v2 | Valida e tipifica a saída da IA |
+| Busca Web (fallback) | `ddgs` (DuckDuckGo Search) | Literatura veterinária complementar |
+| Variáveis de Ambiente | `python-dotenv` | Isola credenciais do código-fonte |
 
 ---
 
-## 🏗️ Arquitetura do Sistema
+## Arquitetura do Sistema
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -82,10 +82,15 @@ O sistema opera em **modo estritamente read-only** no banco, nunca escrevendo ou
 │              Score de qualidade dos dados clínicos              │
 │              Decide se busca web é necessária                   │
 │                                                                 │
-│  Etapa 3 ──► DuckDuckGo (condicional, zero API)                 │
-│              Busca literatura veterinária se score < 60%        │
+│  Etapa 3 ──► Cálculo determinístico (Python puro, zero API)     │
+│              pc_confianca calculado com rubrica fixa            │
+│              baseada nos dados reais do Oracle                  │
 │                                                                 │
-│  Etapa 4 ──► Groq API (UMA única chamada)                       │
+│  Etapa 4 ──► DuckDuckGo (condicional, zero API)                 │
+│              Busca literatura veterinária se score < threshold  │
+│              Prioriza NCBI/PubMed e Merck Veterinary Manual     │
+│                                                                 │
+│  Etapa 5 ──► Groq API (UMA única chamada)                       │
 │              LLaMA 3.3 70B gera DiagnosticoOutput               │
 │              validado pelo Pydantic v2                          │
 └───────────────────────────┬─────────────────────────────────────┘
@@ -120,7 +125,7 @@ arkive_clinical_engine/
 
 ---
 
-## ⚙️ Como Executar (How To)
+## Como Executar (How To)
 
 ### Pré-requisitos
 
@@ -201,7 +206,7 @@ python main.py 1
   "ds_diagnostico": "Suspeita de Gastroenterite Infecciosa Canina",
   "tp_severidade": "MODERADA",
   "ds_insight_ia": "O paciente Rex apresenta vômito frequente e fezes moles...",
-  "pc_confianca": 72,
+  "pc_confianca": 55,
   "fontes_pesquisadas": []
 }
 ```
@@ -210,26 +215,45 @@ Logs de execução são exibidos no terminal. Em caso de erro, o JSON de saída 
 
 ---
 
-## 🔄 Fluxo de Decisão da IA
+## Fluxo de Decisão — Busca Web
 
-O sistema avalia a qualidade dos dados clínicos localmente **antes** de acionar a LLM, usando uma heurística sem custo de API:
+O sistema avalia a qualidade dos dados clínicos localmente **antes** de acionar a LLM, usando uma heurística sem custo de API. A decisão de buscar literatura veterinária é baseada exclusivamente nos dados reais do Oracle — sem regras hardcoded por espécie:
 
 | Critério | Penalidade no Score |
 |----------|-------------------|
 | Sintomas ausentes ou < 20 caracteres | -35 pts |
-| Motivo da consulta vazio | -20 pts |
-| Espécie exótica (não cão/gato) | -20 pts |
-| Sem predisposições genéticas mapeadas | -10 pts |
-| Avaliação de bem-estar ausente | -10 pts |
 | Sintomas genéricos (1 palavra) | -15 pts |
+| Motivo da consulta vazio | -20 pts |
+| Sem predisposições genéticas mapeadas no banco para a espécie/raça | -20 pts |
+| Avaliação de bem-estar ausente | -10 pts |
 
-Se o score ficar **abaixo de 60%** (configurável em `AMBIGUITY_THRESHOLD`), o DuckDuckGo é acionado para buscar literatura veterinária atualizada, e o contexto é enriquecido antes da chamada à LLM.
+Se o score ficar abaixo do `AMBIGUITY_THRESHOLD` (padrão: 60%), o DuckDuckGo é acionado para buscar literatura veterinária atualizada no NCBI/PubMed e Merck Veterinary Manual, enriquecendo o contexto antes da chamada à LLM.
 
 **Resultado: NO MÁXIMO 1 chamada à API do Groq por execução.**
 
+> **Dica para testes:** defina `AMBIGUITY_THRESHOLD=101` no `.env` para forçar a busca web em todas as execuções, independente da qualidade dos dados locais.
+
 ---
 
-## 📊 Schema de Saída (Pydantic v2)
+## Cálculo de Confiança (pc_confianca)
+
+O grau de confiança é calculado **deterministicamente em Python** com base nos dados reais do Oracle, antes de chamar a LLM. O modelo recebe o valor pronto e apenas o utiliza — nunca recalcula.
+
+| Critério | Pontuação |
+|----------|-----------|
+| BASE (sempre) | +30 pts |
+| Sintomas específicos e detalhados (> 3 características) | +25 pts |
+| Sintomas moderadamente descritivos (1–3 características) | +10 pts |
+| Predisposição genética diretamente relacionada aos sintomas | +20 pts |
+| Predisposição genética presente mas indiretamente relacionada | +10 pts |
+| Avaliação de bem-estar completa e coerente | +10 pts |
+| Peso registrado e compatível | +5 pts |
+| Dados clínicos relevantes ausentes (peso, idade ou bem-estar) | -10 pts |
+| Sintomas vagos ou genéricos demais | -15 pts |
+
+---
+
+## Schema de Saída (Pydantic v2)
 
 Mapeado para gravação futura na tabela `TB_ARKIVE_DIAGNOSTICO` pelo serviço Java:
 
@@ -237,13 +261,13 @@ Mapeado para gravação futura na tabela `TB_ARKIVE_DIAGNOSTICO` pelo serviço J
 |-------|------|-----------|
 | `ds_diagnostico` | `str` (5–500 chars) | Título conciso da hipótese diagnóstica |
 | `tp_severidade` | `Literal["LEVE", "MODERADA", "GRAVE"]` | Classificação de severidade |
-| `ds_insight_ia` | `str` (mín. 50 chars) | Raciocínio clínico detalhado da IA |
-| `pc_confianca` | `int` (0–100) | Grau de certeza estimado |
-| `fontes_pesquisadas` | `list[str]` | URLs consultadas (vazia se busca web não foi acionada) |
+| `ds_insight_ia` | `str` (mín. 50 chars) | Raciocínio clínico detalhado da IA, sem URLs |
+| `pc_confianca` | `int` (0–100) | Grau de certeza calculado deterministicamente em Python |
+| `fontes_pesquisadas` | `list[str]` | URLs consultadas (lista vazia se busca web não foi acionada) |
 
 ---
 
-## 🛡️ Garantias de Segurança (READ-ONLY)
+## Garantias de Segurança (READ-ONLY)
 
 O microsserviço garante a imutabilidade do banco em três camadas:
 
@@ -255,7 +279,7 @@ Nenhum `INSERT`, `UPDATE`, `DELETE` ou `MERGE` existe em qualquer arquivo do pro
 
 ---
 
-## 🔧 Solução de Problemas Comuns
+## Solução de Problemas Comuns
 
 | Erro | Causa | Solução |
 |------|-------|---------|
@@ -265,24 +289,25 @@ Nenhum `INSERT`, `UPDATE`, `DELETE` ou `MERGE` existe em qualquer arquivo do pro
 | `429 quota exceeded` | Cota diária da API atingida | A cota do Groq é de ~14.400 req/dia; aguardar reset à meia-noite ou criar nova API key |
 | `ModuleNotFoundError` | Dependência não instalada | Rodar `pip install -r requirements.txt` com o venv ativo |
 | `Nenhuma consulta encontrada` | ID inexistente no banco | Verificar se o ID existe em `TB_ARKIVE_CONSULTA` |
+| `Ratelimit` no DuckDuckGo | Muitas buscas em sequência | O sistema continua sem contexto web; aguarde alguns segundos entre execuções |
 
 ---
 
-## 📋 Dependências
+## Dependências
 
 ```
 oracledb>=2.3.0,<3.0.0
 langchain>=0.3.0,<0.4.0
 langchain-groq>=0.2.0,<1.0.0
 langchain-community>=0.3.0,<0.4.0
-duckduckgo-search>=6.2.0,<7.0.0
+ddgs>=0.1.0
 pydantic>=2.7.0,<3.0.0
 python-dotenv>=1.0.0,<2.0.0
 ```
 
 ---
 
-## 📄 Licença
+## Licença
 
-Projeto acadêmico desenvolvido para o Challenge FIAP 2026 em parceria com a Clyvo Vet.  
+Projeto acadêmico desenvolvido para o Challenge FIAP 2026 em parceria com a Clyvo Vet.
 Uso restrito ao contexto educacional.
