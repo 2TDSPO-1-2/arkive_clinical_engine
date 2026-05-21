@@ -192,7 +192,7 @@ O sistema avalia a qualidade dos dados clínicos localmente **antes** de acionar
 |----------|-------------------|
 | Sintomas ausentes ou < 20 caracteres | -35 pts |
 | Sintomas genéricos (1 palavra) | -15 pts |
-| Motivo da consulta vazio | -20 pts |
+| Motivo da consulta ausente ou < 10 caracteres | -20 pts |
 | Sem predisposições genéticas mapeadas no banco para a espécie/raça | -20 pts |
 | Avaliação de bem-estar ausente | -10 pts |
 
