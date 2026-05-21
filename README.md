@@ -79,7 +79,7 @@ A resposta é trabalhada através da API de Java para persistência dos dados em
 
 ```
 arkive_clinical_engine/
-├── .env.example              # Template de variáveis de ambiente
+├── .env                      # Variáveis de ambiente
 ├── requirements.txt          # Dependências com versões fixas
 ├── config.py                 # Configuração centralizada + validação fail-fast
 ├── main.py                   # Ponto de entrada CLI
