@@ -3,15 +3,8 @@ database/connection.py
 ======================
 Fábrica de conexões Oracle em modo Thin (sem Oracle Instant Client).
 
-Política de leitura:
-  - O usuário DB deve possuir apenas privilégios SELECT (enforçado pelo DBA).
-  - autocommit=False é definido explicitamente como barreira adicional.
-  - Um rollback() é chamado no finally para garantir que nenhuma transação
-    pendente acidental persista.
-  - oracledb.defaults.fetch_lobs = False converte CLOBs automaticamente
-    em str Python, evitando estouro de memória com LOBs grandes.
-
-Referência: https://python-oracledb.readthedocs.io/en/latest/user_guide/lob_data.html
+Garante leitura segura via: autocommit=False, rollback() no finally, e
+oracledb.defaults.fetch_lobs=False (converte CLOBs em str automaticamente).
 """
 
 import logging
@@ -24,27 +17,17 @@ from config import ORACLE_DSN, ORACLE_PASSWORD, ORACLE_USER
 
 logger = logging.getLogger(__name__)
 
-# ── Configuração Global de LOBs ───────────────────────────────────────────────
-# Converte CLOB/BLOB para str/bytes diretamente no fetch, sem alocar objetos LOB.
-# Isso é seguro para campos de tamanho razoável (< 1 GB).
-# Deve ser chamado antes de qualquer conexão ser estabelecida.
+# Converte CLOB/BLOB para str/bytes diretamente no fetch (deve ser chamado antes da primeira conexão)
 oracledb.defaults.fetch_lobs = False
 
 
 @contextmanager
 def get_connection() -> Generator[oracledb.Connection, None, None]:
     """
-    Context manager que fornece uma conexão Oracle Thin em modo leitura.
-
-    Uso::
-
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT ...")
-                rows = cur.fetchall()
+    Context manager que fornece conexão Oracle Thin em modo leitura.
 
     Raises:
-        oracledb.DatabaseError: Se a conexão com o banco falhar.
+        oracledb.DatabaseError: Se a conexão falhar.
     """
     conn: oracledb.Connection | None = None
     try:
@@ -54,10 +37,8 @@ def get_connection() -> Generator[oracledb.Connection, None, None]:
             user=ORACLE_USER,
             password=ORACLE_PASSWORD,
             dsn=ORACLE_DSN,
-            # thin=True é o padrão em oracledb >= 2.0; explicitado por clareza.
         )
 
-        # Barreira explícita: sem auto-commit, sem DML.
         conn.autocommit = False
 
         logger.debug("Conexão Oracle estabelecida com sucesso (READ-ONLY).")
@@ -75,7 +56,6 @@ def get_connection() -> Generator[oracledb.Connection, None, None]:
     finally:
         if conn:
             try:
-                # Desfaz qualquer transação pendente acidental (ex: SELECT FOR UPDATE).
                 conn.rollback()
             except Exception:
                 pass

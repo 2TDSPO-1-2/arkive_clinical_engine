@@ -1,20 +1,12 @@
 """
 database/queries.py
 ===================
-Consultas SQL parametrizadas e lógica de extração de dados clínicos do Oracle.
+SQLs parametrizados e lógica de extração de dados clínicos do Oracle.
 
-Design:
-  - CLINICAL_DATA_QUERY: JOIN único que retorna todos os dados clínicos da
-    consulta, incluindo a avaliação de bem-estar mais recente via LATERAL JOIN
-    com prioridade para a avaliação vinculada à consulta atual.
-  - PREDISPOSITION_QUERY: Busca separada para doenças predispostas da raça/
-    espécie. Separada para evitar multiplicação de linhas no resultado principal.
-  - fetch_clinical_data(): Orquestra ambas as queries e retorna ClinicalContext.
-
-Notas Oracle:
-  - LATERAL JOIN requer Oracle 12c Release 1 ou superior.
-  - CLOBs são automaticamente convertidos em str pelo oracledb.defaults.fetch_lobs=False.
-  - Parâmetros nomeados (:id_consulta) são reutilizados quantas vezes necessário.
+CLINICAL_DATA_QUERY: JOIN único com avaliação de bem-estar via LATERAL JOIN
+                     (requer Oracle 12c+).
+PREDISPOSITION_QUERY: busca separada de predisposições genéticas da raça/espécie
+                      (separada para evitar multiplicação de linhas).
 """
 
 from __future__ import annotations
@@ -28,45 +20,41 @@ import oracledb
 
 logger = logging.getLogger(__name__)
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SQL 1: Dados Clínicos Agregados da Consulta
-# ─────────────────────────────────────────────────────────────────────────────
+# SQL 1: Dados Clínicos Agregados da Consulta
 
 CLINICAL_DATA_QUERY: str = """
 SELECT
-    -- ── Animal ───────────────────────────────────────────────────────────
+    -- Animal
     a.ID_ANIMAL,
     a.NM_ANIMAL,
     a.DS_SEXO,
     a.DS_CASTRADO,
 
-    -- ── Espécie ──────────────────────────────────────────────────────────
+    -- Espécie
     e.ID_ESPECIE,
     e.NM_ESPECIE,
 
-    -- ── Raça (LEFT JOIN: pode ser nula para animais SRD) ─────────────────
+    -- Raça (LEFT JOIN: pode ser nula para animais SRD)
     r.ID_RACA,
     r.NM_RACA,
     r.TP_PORTE,
 
-    -- ── Consulta atual ───────────────────────────────────────────────────
+    -- Consulta atual
     c.ID_CONSULTA,
     c.DT_HORA,
     c.TP_MODALIDADE,
-    c.DS_MOTIVO,           -- CLOB: convertido automaticamente em str
-    c.DS_SINTOMAS,         -- CLOB: convertido automaticamente em str
-    c.DS_OBSERVACAO    AS DS_OBS_CONSULTA,  -- CLOB
+    c.DS_MOTIVO,
+    c.DS_SINTOMAS,
+    c.DS_OBSERVACAO    AS DS_OBS_CONSULTA,
     c.KG_PESO          AS KG_PESO_CONSULTA,
 
-    -- ── Avaliação de Bem-Estar mais recente ──────────────────────────────
-    -- LATERAL JOIN: prioriza registro vinculado a esta consulta,
-    -- depois o mais recente do animal. Retorna NULL se inexistente.
+    -- Avaliação de Bem-Estar mais recente (via LATERAL JOIN)
     abe.NR_IDADE,
     abe.KG_PESO        AS KG_PESO_BEM_ESTAR,
     abe.DS_APETITE,
     abe.DS_ATIVIDADE,
     abe.DS_COMPORTAMENTO,
-    abe.DS_OBSERVACAO  AS DS_OBS_BEM_ESTAR   -- CLOB
+    abe.DS_OBSERVACAO  AS DS_OBS_BEM_ESTAR
 
 FROM       TB_ARKIVE_CONSULTA             c
 JOIN       TB_ARKIVE_ANIMAL               a   ON a.ID_ANIMAL  = c.ID_ANIMAL
@@ -95,9 +83,7 @@ LEFT JOIN LATERAL (
 WHERE c.ID_CONSULTA = :id_consulta
 """
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  SQL 2: Doenças com Predisposição Genética da Raça / Espécie
-# ─────────────────────────────────────────────────────────────────────────────
+# SQL 2: Doenças com Predisposição Genética da Raça / Espécie
 
 PREDISPOSITION_QUERY: str = """
 SELECT
@@ -118,9 +104,7 @@ WHERE  d.ID_DOENCA IN (
 ORDER BY d.NM_DOENCA
 """
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Dataclass: Contexto Clínico Completo
-# ─────────────────────────────────────────────────────────────────────────────
+# Contexto Clínico Completo
 
 
 @dataclass
@@ -130,22 +114,22 @@ class ClinicalContext:
     Serve como contrato entre a camada de banco e a camada de IA.
     """
 
-    # ── Animal ───────────────────────────────────────────────────────────
+    # Animal
     id_animal: int = 0
     nm_animal: str = ""
     ds_sexo: str = ""
     ds_castrado: str = ""
 
-    # ── Espécie ──────────────────────────────────────────────────────────
+    # Espécie
     id_especie: int | None = None
     nm_especie: str = ""
 
-    # ── Raça ─────────────────────────────────────────────────────────────
+    # Raça
     id_raca: int | None = None
     nm_raca: str = ""
     tp_porte: str = ""
 
-    # ── Consulta ─────────────────────────────────────────────────────────
+    # Consulta
     id_consulta: int = 0
     dt_hora: datetime | None = None
     tp_modalidade: str = ""
@@ -154,7 +138,7 @@ class ClinicalContext:
     ds_obs_consulta: str = ""
     kg_peso_consulta: float | None = None
 
-    # ── Bem-Estar ────────────────────────────────────────────────────────
+    # Bem-Estar
     nr_idade: float | None = None
     kg_peso_bem_estar: float | None = None
     ds_apetite: str = ""
@@ -162,25 +146,21 @@ class ClinicalContext:
     ds_comportamento: str = ""
     ds_obs_bem_estar: str = ""
 
-    # ── Predisposições Genéticas ─────────────────────────────────────────
+    # Predisposições Genéticas
     predisposicoes: list[dict[str, str]] = field(default_factory=list)
 
-    # ── Propriedades derivadas ────────────────────────────────────────────
+    # Propriedades derivadas
 
     @property
     def peso_efetivo_kg(self) -> float | None:
-        """Retorna o peso da consulta, ou da avaliação de bem-estar como fallback."""
+        """Peso da consulta ou da avaliação de bem-estar como fallback."""
         return self.kg_peso_consulta or self.kg_peso_bem_estar
 
     def to_clinical_summary(self) -> str:
-        """
-        Renderiza um resumo clínico textual rico para injeção no prompt da LLM.
-        Formatação clara e delimitada para facilitar o parsing pelo modelo.
-        """
+        """Renderiza resumo clínico textual para injeção no prompt da LLM."""
         _SEXO = {"M": "Macho", "F": "Fêmea"}
         _CASTRADO = {"S": "Castrado(a)", "N": "Inteiro(a)"}
 
-        # ── Bloco: Predisposições ─────────────────────────────────────────
         if self.predisposicoes:
             pred_lines = []
             for doenca in self.predisposicoes:
@@ -193,7 +173,6 @@ class ClinicalContext:
         else:
             predisposicoes_block = "  Nenhuma predisposição genética mapeada para esta raça/espécie."
 
-        # ── Bloco: Bem-Estar ──────────────────────────────────────────────
         welfare_items = {
             "Apetite": self.ds_apetite,
             "Atividade": self.ds_atividade,
@@ -203,7 +182,6 @@ class ClinicalContext:
             f"  {k}: {v}" for k, v in welfare_items.items() if v
         ] or ["  Avaliação de bem-estar não registrada nesta consulta."]
 
-        # ── Composição final ──────────────────────────────────────────────
         peso_str = f"{self.peso_efetivo_kg:.2f} kg" if self.peso_efetivo_kg else "Não informado"
         idade_str = f"{self.nr_idade:.1f} anos" if self.nr_idade else "Não informada"
         dt_str = self.dt_hora.strftime("%d/%m/%Y %H:%M") if self.dt_hora else "Não informada"
@@ -233,29 +211,20 @@ class ClinicalContext:
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Função Principal de Extração
-# ─────────────────────────────────────────────────────────────────────────────
+# Função Principal de Extração
 
 
 def fetch_clinical_data(conn: oracledb.Connection, id_consulta: int) -> ClinicalContext:
     """
-    Executa as queries SQL e retorna um ClinicalContext populado.
-
-    Args:
-        conn:         Conexão Oracle ativa (READ-ONLY).
-        id_consulta:  ID da consulta a ser analisada.
-
-    Returns:
-        ClinicalContext com todos os dados clínicos agregados.
+    Executa as duas queries e retorna ClinicalContext populado.
 
     Raises:
-        ValueError:            Se nenhuma consulta for encontrada para o ID.
-        oracledb.DatabaseError: Em caso de erro de banco de dados.
+        ValueError: Nenhuma consulta encontrada para o ID.
+        oracledb.DatabaseError: Erro de banco de dados.
     """
     ctx = ClinicalContext(id_consulta=id_consulta)
 
-    # ── Query 1: Dados Clínicos Principais ───────────────────────────────
+    # Query 1: Dados Clínicos Principais
     logger.info("Executando CLINICAL_DATA_QUERY para ID_CONSULTA=%d", id_consulta)
     with conn.cursor() as cur:
         cur.execute(CLINICAL_DATA_QUERY, {"id_consulta": id_consulta})
@@ -271,7 +240,7 @@ def fetch_clinical_data(conn: oracledb.Connection, id_consulta: int) -> Clinical
     row_dict: dict[str, Any] = dict(zip(columns, row))
     logger.debug("Dados clínicos retornados: %s", list(row_dict.keys()))
 
-    # ── Mapeamento do resultado para o dataclass ──────────────────────────
+    # Mapeamento do resultado para o dataclass
     ctx.id_animal = int(row_dict["id_animal"] or 0)
     ctx.nm_animal = str(row_dict.get("nm_animal") or "")
     ctx.ds_sexo = str(row_dict.get("ds_sexo") or "")
@@ -298,7 +267,7 @@ def fetch_clinical_data(conn: oracledb.Connection, id_consulta: int) -> Clinical
     ctx.ds_comportamento = str(row_dict.get("ds_comportamento") or "")
     ctx.ds_obs_bem_estar = str(row_dict.get("ds_obs_bem_estar") or "")
 
-    # ── Query 2: Predisposições Genéticas ────────────────────────────────
+    # Query 2: Predisposições Genéticas
     if ctx.id_especie is not None:
         logger.info(
             "Executando PREDISPOSITION_QUERY | ID_ESPECIE=%s | ID_RACA=%s",
@@ -313,7 +282,6 @@ def fetch_clinical_data(conn: oracledb.Connection, id_consulta: int) -> Clinical
             pred_columns = [col[0].lower() for col in cur.description]
             for pred_row in cur.fetchall():
                 pred_dict = dict(zip(pred_columns, pred_row))
-                # Garante que todos os valores são str (CLOBs já convertidos)
                 ctx.predisposicoes.append(
                     {k: str(v) if v is not None else "" for k, v in pred_dict.items()}
                 )
@@ -329,7 +297,7 @@ def fetch_clinical_data(conn: oracledb.Connection, id_consulta: int) -> Clinical
 
 
 def _safe_float(value: Any) -> float | None:
-    """Converte um valor para float de forma segura, retornando None em falhas."""
+    """Converte valor para float; retorna None em falha."""
     if value is None:
         return None
     try:

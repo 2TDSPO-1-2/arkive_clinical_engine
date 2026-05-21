@@ -2,18 +2,8 @@
 agents/clinical_agent.py
 ========================
 Motor de Inteligência Clínica Veterinária ArkIve.
-
-Arquitetura de chamada única à API (Single-Call) via Groq:
-
-  Etapa 1 — Extração Oracle (READ-ONLY, sem LLM)
-  Etapa 2 — Heurística local de ambiguidade (sem LLM)
-  Etapa 3 — Cálculo determinístico do pc_confianca (sem LLM)
-  Etapa 4 — Busca web DuckDuckGo condicional (sem LLM)
-  Etapa 5 — UMA ÚNICA chamada ao Groq com contexto completo
-
-Resultado: NO MÁXIMO 1 chamada à API do Groq por execução.
-O pc_confianca é calculado deterministicamente em Python com base
-nos dados reais do Oracle — o modelo apenas recebe o valor pronto.
+Pipeline: Oracle (READ-ONLY) → heurística local → pc_confianca determinístico
+          → DuckDuckGo opcional → 1 chamada ao Groq.
 """
 
 from __future__ import annotations
@@ -39,9 +29,7 @@ from schemas.diagnostic import DiagnosticoOutput
 
 logger = logging.getLogger(__name__)
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  System Prompt — injetado na única chamada ao Groq
-# ─────────────────────────────────────────────────────────────────────────────
+# System Prompt — injetado na única chamada ao Groq
 
 _DIAGNOSTIC_SYSTEM_PROMPT = (
     "Você é o Motor de Inteligência Clínica Veterinária do sistema ArkIve, "
@@ -98,9 +86,7 @@ _DIAGNOSTIC_SYSTEM_PROMPT = (
     "fornecido. Não inclua texto adicional fora do JSON."
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Dataclass: resultado da heurística local de ambiguidade
-# ─────────────────────────────────────────────────────────────────────────────
+# Resultado da heurística local de ambiguidade (sem LLM)
 
 
 @dataclass
@@ -112,31 +98,20 @@ class _LocalAmbiguityResult:
     search_query: str   # Query sugerida para o DuckDuckGo
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Classe Principal
-# ─────────────────────────────────────────────────────────────────────────────
-
 
 class ClinicalIntelligenceEngine:
     """
     Motor de Inteligência Clínica Veterinária com RAG local (Oracle) e
     fallback automático de busca web (DuckDuckGo).
 
-    Atende qualquer espécie animal — doméstica, silvestre, zoológica
-    ou de produção.
-
-    Faz NO MÁXIMO 1 chamada à API do Groq por execução.
-    O pc_confianca é calculado deterministicamente em Python.
-
     Uso::
 
         engine = ClinicalIntelligenceEngine()
         result: dict = engine.analyze(id_consulta=42)
-        print(result)
     """
 
     def __init__(self) -> None:
-        """Inicializa a LLM Groq e a chain de diagnóstico estruturado."""
+        """Inicializa LLM Groq e a chain de diagnóstico estruturado."""
         logger.info("Inicializando ClinicalIntelligenceEngine | Modelo: %s", GROQ_MODEL)
 
         self._llm = ChatGroq(
@@ -145,44 +120,29 @@ class ClinicalIntelligenceEngine:
             temperature=GROQ_TEMPERATURE,
         )
 
-        # Única chain — structured output via function calling do Groq
+        # Structured output via function calling do Groq
         self._diagnostic_chain = self._llm.with_structured_output(DiagnosticoOutput)
 
         logger.info("Chain de diagnóstico inicializada (1 chamada de API por execução).")
 
-    # ──────────────────────────────────────────────────────────────────────────
-    #  Método Público Principal
-    # ──────────────────────────────────────────────────────────────────────────
+    # Método Público Principal
 
     def analyze(self, id_consulta: int) -> dict[str, Any]:
         """
         Ponto de entrada principal. Faz exatamente 1 chamada ao Groq.
 
-        Pipeline:
-          1. Extrai dados do Oracle (READ-ONLY, sem LLM).
-          2. Avalia ambiguidade por heurística local (sem LLM).
-          3. Calcula pc_confianca deterministicamente em Python (sem LLM).
-          4. Busca web no DuckDuckGo se necessário (sem LLM).
-          5. Uma única chamada ao Groq com contexto completo.
-
-        Args:
-            id_consulta: ID numérico da consulta a ser analisada.
-
-        Returns:
-            Dict com os campos de DiagnosticoOutput serializados.
-
         Raises:
-            ValueError:             Se a consulta não for encontrada no banco.
-            RuntimeError:           Se o Groq falhar ao gerar o diagnóstico.
-            oracledb.DatabaseError: Em caso de falha de acesso ao Oracle.
+            ValueError: Consulta não encontrada no banco.
+            RuntimeError: Falha ao gerar diagnóstico no Groq.
+            oracledb.DatabaseError: Falha de acesso ao Oracle.
         """
         logger.info("── Iniciando análise clínica | ID_CONSULTA=%d ──", id_consulta)
 
-        # ── Etapa 1: Extração Oracle ──────────────────────────────────────────
+        # Etapa 1: Extração Oracle
         ctx: ClinicalContext = self._fetch_oracle_data(id_consulta)
         clinical_summary: str = ctx.to_clinical_summary()
 
-        # ── Etapa 2: Heurística local de ambiguidade (zero chamadas de API) ───
+        # Etapa 2: Heurística local de ambiguidade
         ambiguity = _evaluate_ambiguity_locally(ctx)
         logger.info(
             "Heurística local | score=%d%% | busca_web=%s | motivo: %s",
@@ -191,12 +151,12 @@ class ClinicalIntelligenceEngine:
             ambiguity.reason,
         )
 
-        # ── Etapa 3: Cálculo determinístico do pc_confianca (zero API) ────────
+        # Etapa 3: Cálculo determinístico do pc_confianca
         sintomas = (ctx.ds_sintomas or "").strip()
         confianca_calculada = _calculate_confidence(ctx, sintomas)
         logger.info("Confiança calculada deterministicamente: %d%%", confianca_calculada)
 
-        # ── Etapa 4: Busca web condicional (zero chamadas de API) ─────────────
+        # Etapa 4: Busca web condicional
         web_context: str = ""
         sources: list[str] = []
 
@@ -207,7 +167,7 @@ class ClinicalIntelligenceEngine:
         else:
             logger.info("Dados locais suficientes — busca web não acionada.")
 
-        # ── Etapa 5: UMA ÚNICA chamada ao Groq ───────────────────────────────
+        # Etapa 5: Chamada ao Groq
         logger.info("Enviando requisição ao Groq (chamada 1/1)...")
         diagnostic: DiagnosticoOutput = self._generate_diagnostic(
             clinical_summary=clinical_summary,
@@ -226,9 +186,7 @@ class ClinicalIntelligenceEngine:
 
         return diagnostic.model_dump()
 
-    # ──────────────────────────────────────────────────────────────────────────
-    #  Métodos Privados
-    # ──────────────────────────────────────────────────────────────────────────
+    # Métodos Privados
 
     def _fetch_oracle_data(self, id_consulta: int) -> ClinicalContext:
         """Extrai dados clínicos do Oracle usando conexão READ-ONLY em Thin mode."""
@@ -245,15 +203,7 @@ class ClinicalIntelligenceEngine:
         return ctx
 
     def _perform_web_search(self, query: str) -> tuple[str, list[str]]:
-        """
-        Realiza busca no DuckDuckGo. Não consome cota de API.
-
-        Args:
-            query: Query de busca em linguagem natural.
-
-        Returns:
-            Tupla (web_context_text, list_of_urls).
-        """
+        """Busca no DuckDuckGo. Retorna (texto_contexto, lista_de_urls)."""
         try:
             from ddgs import DDGS
         except ImportError:
@@ -292,21 +242,7 @@ class ClinicalIntelligenceEngine:
         ctx: ClinicalContext,
         confianca_calculada: int,
     ) -> DiagnosticoOutput:
-        """
-        Única chamada ao Groq: monta o prompt completo com dados Oracle,
-        pc_confianca pré-calculado e contexto web opcional.
-        Retorna DiagnosticoOutput validado pelo Pydantic v2.
-
-        Args:
-            clinical_summary:    Resumo textual dos dados clínicos do Oracle.
-            web_context:         Snippets de busca web (vazio se não realizada).
-            sources:             URLs das fontes web consultadas.
-            ctx:                 ClinicalContext completo para referência.
-            confianca_calculada: Valor determinístico calculado em Python.
-
-        Returns:
-            DiagnosticoOutput validado.
-        """
+        """Monta o prompt completo e faz a única chamada ao Groq. Retorna DiagnosticoOutput validado."""
         parts = [
             "Analise os seguintes dados clínicos veterinários e gere o "
             "diagnóstico estruturado:\n\n",
@@ -347,53 +283,44 @@ class ClinicalIntelligenceEngine:
                 f"O modelo não gerou um diagnóstico estruturado válido: {exc}"
             ) from exc
 
-        # Garante que o pc_confianca é sempre o valor calculado pelo sistema,
-        # independente do que o modelo retornou.
+        # Garante que pc_confianca é sempre o valor calculado pelo sistema
         diagnostic.pc_confianca = confianca_calculada
 
-        # Garante preenchimento de fontes caso a LLM não o tenha feito
+        # Preenche fontes caso a LLM não o tenha feito
         if sources and not diagnostic.fontes_pesquisadas:
             diagnostic.fontes_pesquisadas = sources
 
         return diagnostic
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Cálculo Determinístico de Confiança (zero chamadas de API)
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 def _calculate_confidence(ctx: ClinicalContext, sintomas: str) -> int:
     """
-    Calcula o pc_confianca deterministicamente com base nos dados
-    extraídos do Oracle. Elimina a dependência do modelo para esta soma.
+    Calcula pc_confianca deterministicamente. O modelo recebe o valor pronto.
 
-    Rubrica:
-      BASE                                                         = 30
-      Sintomas específicos e detalhados (> 3 palavras relevantes)  = +25
-      Sintomas moderadamente descritivos (1-3 palavras relevantes) = +10
-      Predisposição genética diretamente relacionada aos sintomas  = +20
-      Predisposição genética presente mas indiretamente relacionada = +10
-      Bem-estar completo (apetite + atividade + comportamento)     = +10
-      Peso registrado e compatível                                 = +5
-      Dados clínicos relevantes ausentes                           = -10
-      Sintomas vagos ou genéricos demais                           = -15
+    Rubrica (base = 30):
+    +25 Sintomas específicos e detalhados (> 3 palavras relevantes)
+    +10 Sintomas moderadamente descritivos (1–3 palavras relevantes)
+    +20 Predisposição genética diretamente relacionada aos sintomas
+    +10 Predisposição genética presente mas indiretamente relacionada
+    +10 Bem-estar completo (apetite + atividade + comportamento)
+    +5  Peso registrado
+    -10 Dados relevantes ausentes (idade, peso ou bem-estar)
+    -15 Sintomas vagos ou genéricos
 
-    Returns:
-        Inteiro entre 0 e 100.
+    Retorna inteiro entre 0 e 100.
     """
     score = 30  # BASE sempre
 
-    # ── Sintomas ──────────────────────────────────────────────────────────────
+    # Sintomas
     palavras_relevantes = re.findall(r"\b\w{4,}\b", sintomas)
     if len(palavras_relevantes) > 3:
-        score += 25  # específicos e detalhados
+        score += 25
     elif len(palavras_relevantes) >= 1:
-        score += 10  # moderadamente descritivos
+        score += 10
     else:
-        score -= 15  # vagos ou ausentes
+        score -= 15
 
-    # ── Predisposições genéticas ──────────────────────────────────────────────
+    # Predisposições genéticas
     if ctx.predisposicoes:
         sintomas_lower = sintomas.lower()
         # Verifica se alguma doença mapeada tem termos presentes nos sintomas
@@ -406,15 +333,15 @@ def _calculate_confidence(ctx: ClinicalContext, sintomas: str) -> int:
         )
         score += 20 if diretamente_relacionada else 10
 
-    # ── Bem-estar ─────────────────────────────────────────────────────────────
+    # Bem-estar
     if ctx.ds_apetite and ctx.ds_atividade and ctx.ds_comportamento:
         score += 10
 
-    # ── Peso registrado ───────────────────────────────────────────────────────
+    # Peso
     if ctx.peso_efetivo_kg:
         score += 5
 
-    # ── Penalidade: dados relevantes ausentes ─────────────────────────────────
+    # Penalidade: dados relevantes ausentes
     dados_ausentes = (
         not ctx.nr_idade
         or not ctx.peso_efetivo_kg
@@ -438,32 +365,17 @@ def _calculate_confidence(ctx: ClinicalContext, sintomas: str) -> int:
     return resultado
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Heurística Local de Ambiguidade (zero chamadas de API)
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 def _evaluate_ambiguity_locally(ctx: ClinicalContext) -> _LocalAmbiguityResult:
     """
-    Avalia a qualidade dos dados clínicos com regras determinísticas em Python.
-    Não realiza nenhuma chamada à API.
-
-    A decisão de acionar a busca web é baseada nos dados já extraídos do Oracle:
-    se não há predisposições mapeadas para a combinação espécie/raça do animal,
-    a busca web é acionada para complementar o contexto clínico — independente
-    de qual espécie seja (o sistema atende qualquer animal).
-
-    Pontuação base = 100. Penalidades subtraídas conforme critérios:
-
-    | Critério                                             | Penalidade |
-    |------------------------------------------------------|------------|
-    | DS_SINTOMAS ausente ou < 20 caracteres               |    -35     |
-    | DS_SINTOMAS genérico (1 palavra só)                  |    -15     |
-    | DS_MOTIVO ausente ou < 10 caracteres                 |    -20     |
-    | Sem predisposições genéticas mapeadas (espécie/raça) |    -20     |
-    | Avaliação de bem-estar ausente                       |    -10     |
-
+    Avalia qualidade dos dados clínicos com regras determinísticas (sem LLM).
     Se score < AMBIGUITY_THRESHOLD → needs_web_search = True.
+
+    Penalidades (base = 100):
+    -35 DS_SINTOMAS ausente ou < 20 caracteres
+    -15 DS_SINTOMAS genérico (1 palavra)
+    -20 DS_MOTIVO ausente ou < 10 caracteres
+    -20 Sem predisposições genéticas mapeadas para a espécie/raça
+    -10 Avaliação de bem-estar ausente
     """
     score = 100
     reasons: list[str] = []
@@ -471,7 +383,7 @@ def _evaluate_ambiguity_locally(ctx: ClinicalContext) -> _LocalAmbiguityResult:
     sintomas = (ctx.ds_sintomas or "").strip()
     motivo = (ctx.ds_motivo or "").strip()
 
-    # ── Penalidade: sintomas ausentes ou muito curtos ─────────────────────────
+    # Penalidade: sintomas ausentes ou muito curtos
     if len(sintomas) < 20:
         score -= 35
         reasons.append("sintomas ausentes ou insuficientes")
@@ -479,14 +391,12 @@ def _evaluate_ambiguity_locally(ctx: ClinicalContext) -> _LocalAmbiguityResult:
         score -= 15
         reasons.append("sintomas excessivamente genéricos")
 
-    # ── Penalidade: motivo ausente ou muito curto ─────────────────────────────
+    # Penalidade: motivo ausente ou muito curto
     if len(motivo) < 10:
         score -= 20
         reasons.append("motivo da consulta não informado")
 
-    # ── Penalidade: sem predisposições mapeadas para espécie/raça ────────────
-    # Verificação baseada nos dados reais do banco — sem hardcode de espécies.
-    # ctx.predisposicoes já contém o cruzamento espécie+raça da PREDISPOSITION_QUERY.
+    # Penalidade: sem predisposições mapeadas para espécie/raça
     if not ctx.predisposicoes:
         especie_str = ctx.nm_especie or "não identificada"
         raca_str = f" / raça '{ctx.nm_raca}'" if ctx.nm_raca else ""
@@ -496,7 +406,7 @@ def _evaluate_ambiguity_locally(ctx: ClinicalContext) -> _LocalAmbiguityResult:
             f"'{especie_str}'{raca_str} — busca web pode enriquecer o diagnóstico"
         )
 
-    # ── Penalidade: sem avaliação de bem-estar ────────────────────────────────
+    # Penalidade: sem avaliação de bem-estar
     if not ctx.ds_apetite and not ctx.ds_atividade and not ctx.ds_comportamento:
         score -= 10
         reasons.append("avaliação de bem-estar ausente")
@@ -512,11 +422,7 @@ def _evaluate_ambiguity_locally(ctx: ClinicalContext) -> _LocalAmbiguityResult:
 
 
 def _build_search_query(ctx: ClinicalContext, sintomas: str, motivo: str) -> str:
-    """
-    Monta uma query de busca veterinária específica para o DuckDuckGo.
-    Inclui espécie e raça do banco para maximizar a relevância dos resultados.
-    Direciona para NCBI e Merck Veterinary Manual para fontes de qualidade.
-    """
+    """Monta query veterinária para o DuckDuckGo priorizando NCBI e Merck."""
     parts: list[str] = []
 
     if ctx.nm_especie:
