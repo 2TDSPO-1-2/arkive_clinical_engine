@@ -16,6 +16,14 @@
 
 ---
 
+## Demonstração em Vídeo
+
+> Assista à apresentação do projeto, explicação da arquitetura e testes:
+
+[![Assistir no YouTube](https://img.shields.io/badge/YouTube-Assistir%20Apresentação-red?style=for-the-badge&logo=youtube)](https://www.youtube.com/watch?v=zWqLgywXfv4)
+
+---
+
 ## Problema Abordado
 
 A jornada de saúde do pet é **fragmentada e reativa**. Responsáveis e veterinários interagem apenas em momentos pontuais — vacinas, emergências, retornos — sem continuidade inteligente entre as consultas.
@@ -135,11 +143,7 @@ pip install -r requirements.txt
 
 ### 4. Configurar as variáveis de ambiente
 
-Copie o arquivo de exemplo e preencha com suas credenciais:
-
-```bash
-cp .env.example .env
-```
+Copie o exemplo e preencha com suas credenciais:
 
 Edite o `.env`:
 
@@ -253,7 +257,6 @@ Nenhum `INSERT`, `UPDATE`, `DELETE` ou `MERGE` existe em qualquer arquivo do pro
 
 | Erro | Causa | Solução |
 |------|-------|---------|
-| `ORA-00932: inconsistent datatypes` | `SELECT DISTINCT` em coluna CLOB | Já corrigido na versão atual via subquery |
 | `ORA-12505` | SID não reconhecido | Usar o DSN no formato longo: `(DESCRIPTION=(ADDRESS=...)(CONNECT_DATA=(SID=ORCL)))` |
 | `ORA-01017` | Usuário/senha incorretos | Verificar `ORACLE_USER` e `ORACLE_PASSWORD` no `.env` |
 | `429 quota exceeded` | Cota diária da API atingida | A cota do Groq é de ~14.400 req/dia; aguardar reset à meia-noite ou criar nova API key |
