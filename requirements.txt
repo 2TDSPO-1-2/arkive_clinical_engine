@@ -1,24 +1,18 @@
-# ============================================================
-#  ArkIve — Motor de Inteligência Clínica Veterinária
 #  Dependências de produção (Python 3.11+)
-# ============================================================
 
-# Oracle Database driver — Thin mode (sem Oracle Instant Client)
+# Oracle Database driver
 oracledb>=2.3.0,<3.0.0
 
 # LangChain core
-langchain>=0.3.0,<0.4.0
+langchain-core>=0.3.0,<0.4.0
 
-# Groq via LangChain (llama-3.3-70b-versatile, free tier)
+# Groq via LangChain
 langchain-groq>=0.2.0,<1.0.0
 
-# LangChain community tools (DuckDuckGo search fallback)
-langchain-community>=0.3.0,<0.4.0
-
-# DuckDuckGo search (usado diretamente para extração de URLs)
+# DuckDuckGo search
 ddgs>=0.1.0
 
-# Pydantic v2 — validação de schema e structured output
+# Pydantic v2
 pydantic>=2.7.0,<3.0.0
 
 # Variáveis de ambiente

@@ -53,7 +53,7 @@ O sistema opera em **modo estritamente read-only** no banco, nunca escrevendo ou
 |--------|-----------|-----------------|
 | Linguagem | Python 3.11+ | Orquestra todas as etapas |
 | LLM / IA Generativa | [Groq API](https://console.groq.com) · `llama-3.3-70b-versatile` | Gera o raciocínio clínico e o diagnóstico |
-| Orquestração LLM | LangChain + `with_structured_output()` | Garante saída JSON validada pelo Pydantic |
+| Integração LLM | `langchain-groq` + `langchain-core` · `ChatGroq.with_structured_output()` | Conecta ao Groq e garante saída JSON validada pelo Pydantic; sem chains ou pipelines LCEL |
 | Banco de Dados | Oracle via `oracledb` (modo Thin) | Fonte de dados clínicos — somente leitura |
 | Validação de Schema | Pydantic v2 | Valida e tipifica a saída da IA |
 | Busca Web (fallback) | `ddgs` (DuckDuckGo Search) | Literatura veterinária complementar |
@@ -65,14 +65,15 @@ O sistema opera em **modo estritamente read-only** no banco, nunca escrevendo ou
 
 ```
 Entrada: main.py ──► python main.py <ID_CONSULTA>
-Etapa 1 ──► Oracle (READ-ONLY): Extrai: animal, espécie, raça, consulta, bem-estar e predisposições genéticas.
-Etapa 2 ──► Heurística local: Score de qualidade dos dados clínicos. Decide se busca web é necessária.
-Etapa 3 ──► Cálculo determinístico: pc_confianca calculado com rubrica fixa baseada nos dados reais do Oracle.
-Etapa 4 ──► DuckDuckGo: Busca literatura veterinária se score < threshold. Prioriza NCBI/PubMed e Merck Veterinary Manual.
-Etapa 5 ──► Groq API: LLaMA 3.3 70B gera DiagnosticoOutput validado pelo Pydantic v2.
+Etapa 1 ──► Oracle (READ-ONLY): Extrai animal, espécie, raça, consulta, bem-estar e predisposições genéticas.
+Etapa 2 ──► Python puro (sem LLM): _evaluate_ambiguity_locally() pontua a qualidade dos dados clínicos (0–100).
+             Se score < AMBIGUITY_THRESHOLD → busca web ativada. Decisão 100% determinística, sem custo de API.
+Etapa 3 ──► Python puro (sem LLM): _calculate_confidence() calcula pc_confianca com rubrica fixa baseada nos dados reais do Oracle.
+Etapa 4 ──► DuckDuckGo (condicional): Busca literatura veterinária se score < threshold. Prioriza NCBI/PubMed e Merck Veterinary Manual.
+Etapa 5 ──► Groq API (1 chamada): LLaMA 3.3 70B recebe resumo clínico + pc_confianca pronto e gera DiagnosticoOutput validado pelo Pydantic v2.
 Saída: JSON ──► {ds_diagnostico, tp_severidade, ds_insight_ia, pc_confianca, fontes_pesquisadas}
 
-A resposta é trabalhada através da API de Java para persistência dos dados em TB_ARKIVE_DIAGNOSTICO.
+A resposta é consumida pela API Java para persistência em TB_ARKIVE_DIAGNOSTICO.
 ```
 
 ### Estrutura de Arquivos
@@ -266,9 +267,8 @@ Nenhum `INSERT`, `UPDATE`, `DELETE` ou `MERGE` existe em qualquer arquivo do pro
 
 ```
 oracledb>=2.3.0,<3.0.0
-langchain>=0.3.0,<0.4.0
+langchain-core>=0.3.0,<0.4.0
 langchain-groq>=0.2.0,<1.0.0
-langchain-community>=0.3.0,<0.4.0
 ddgs>=0.1.0
 pydantic>=2.7.0,<3.0.0
 python-dotenv>=1.0.0,<2.0.0
