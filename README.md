@@ -16,6 +16,12 @@
 
 ---
 
+## Repositório
+ 
+[![GitHub](https://img.shields.io/badge/GitHub-Acessar%20Repositório-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/2TDSPO-1-2/arkive_clinical_engine)
+
+---
+
 ## Demonstração em Vídeo
 
 > Assista à apresentação do projeto, explicação da arquitetura e testes:
